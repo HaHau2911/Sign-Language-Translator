@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Nhận dạng ký hiệu tay</title>
+    <style>
+      canvas {
+        border: 1px solid black;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Nhận dạng ký hiệu tay</h1>
+    <video id="video" width="126" height="60" style="display:none"></video>
+    <canvas id="canvas" width="126" height="60" willReadFrequently="true"></canvas>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+    <script>
+      // Load model
+      let model;
+      async function loadModel() {
+        model = await tf.loadLayersModel('https://raw.githubusercontent.com/HaHau2911/sign-language-recognition_basic/master/model_API/model.json');
+        model.summary();
+      }
+      loadModel();
+
+      // Get references to video, canvas, and flower name span
+      const video = document.getElementById('video');
+      const canvas = document.getElementById('canvas');
+      console.log(canvas.getContext('2d').willReadFrequently);
+      const context = canvas.getContext('2d');
+      const label_map = {
+          0: 'ban dang lam gi',
+          1: 'ban di dau the',
+          2: 'ban hieu ngon ngu ky hieu khong',
+          3: 'ban hoc lop may',
+          4: 'ban khoe khong',
+          5: 'ban muon gio roi',
+          6: 'ban phai canh giac',
+          7: 'ban ten la gi',
+          8: 'ban tien bo day',
+          9: 'ban trong cau co the',
+          10: 'bo me toi cung la nguoi Diec',
+          11: 'cai nay bao nhieu tien',
+          12: 'cai nay la cai gi',
+          13: 'cam on',
+          14: 'cap cuu',
+          15: 'chuc mung',
+          16: 'chung toi giao tiep voi nhau bang ngon ngu ky hieu',
+          17: 'con yeu me',
+          18: 'cong viec cua ban la gi',
+          19: 'hen gap lai cac ban',
+          20: 'mon nay khong ngon',
+          21: 'toi bi chong mat',
+          22: 'toi bi cuop',
+          23: 'toi bi dau dau',
+          24: 'toi bi dau hong',
+          25: 'toi bi ket xe',
+          26: 'toi bi lac',
+          27: 'toi bi phan biet doi xu',
+          28: 'toi cam thay rat hoi hop',
+          29: 'toi cam thay rat vui',
+          30: 'toi can an sang',
+          31: 'toi can di ve sinh',
+          32: 'toi can gap bac si',
+          33: 'toi can phien dich',
+          34: 'toi can thuoc',
+          35: 'toi dang an sang',
+          36: 'toi dang buon',
+          37: 'toi dang o ben xe',
+          38: 'toi dang o cong vien',
+          39: 'toi dang phai cach ly',
+          40: 'toi dang phan van',
+          41: 'toi di sieu thi',
+          42: 'toi di toi Ha Noi',
+          43: 'toi doc kem',
+          44: 'toi khoi benh roi',
+          45: 'toi khong dem theo tien',
+          46: 'toi khong hieu',
+          47: 'toi khong quan tam',
+          48: 'toi la hoc sinh',
+          49: 'toi la nguoi Diec',
+          50: 'toi la tho theu',
+          51: 'toi lam viec o cua hang',
+          52: 'toi nham dia chi',
+          53: 'toi song o Ha Noi',
+          54: 'toi thay doi bung',
+          55: 'toi thay nho ban',
+          56: 'toi thich an mi',
+          57: 'toi thich phim truyen',
+          58: 'toi viet kem',
+          59: 'xin chao'
+        }
+      // Get access to the camera
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(function(stream) {
+          video.srcObject = stream;
+          video.play();
+        })
+        .catch(function(err) {
+          console.log("An error occurred: " + err);
+        });
+
+      // Use AI to recognize the gesture in the video stream
+      function recognize(model) {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const logits = tf.tidy(() => {
+          const img = tf.browser.fromPixels(imageData).toFloat();
+          const offset = tf.scalar(127.5);
+          const normalized = img.sub(offset).div(offset);
+          const reshaped = tf.reshape(normalized, [-1, 60, 126]);
+          return model.predict(reshaped);
+        });
+        const prediction = logits.argMax(-1).dataSync()[0];
+        const probability = tf.softmax(logits).dataSync()[prediction];
+        const probabilityString = `${(probability * 1500).toFixed(2)}%`;
+        const predictedLabel = label_map[prediction];
+
+        // Hiển thị giá trị xác suất của các label
+        const probabilityList = [];
+        for (let i = 0; i < Object.keys(label_map).length; i++) {
+          const label = label_map[i];
+          const probability_i = tf.softmax(logits).dataSync()[i];
+          probabilityList.push({
+            label: label,
+            probability: probability_i
+          });
+        }
+
+        // Sắp xếp giá trị xác suất theo thứ tự giảm dần
+        probabilityList.sort(function(a, b) {
+          return b.probability - a.probability;
+        });
+
+        // In ra giá trị xác suất của các label theo thứ tự giảm dần
+        let result = "";
+        for (let i = 0; i < probabilityList.length; i++) {
+          result += `${i}: ${(probabilityList[i].probability * 1500).toFixed(2)}% ${probabilityList[i].label}<br>`;
+        }
+        document.getElementById('gesture').textContent = predictedLabel;
+        document.getElementById('probability_ges').innerHTML = result;
+        logits.dispose();
+        requestAnimationFrame(() => recognize(model));
+      }
+      loadModel().then(() => {
+        recognize(model);
+      });
+    </script>
+    <div>
+      <p>Ký hiệu tay: <span id="gesture"></span></p>
+      <p><span id="probability_ges"></span></p>
+      <ul id="probability_list"></ul>
+    </div>
+  </body>
+</html>
